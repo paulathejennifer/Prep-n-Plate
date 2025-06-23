@@ -20,7 +20,7 @@
       color: #333;
     }
     .container {
-      max-width: 800px;
+      max-width: 900px;
       margin: auto;
       text-align: center;
       background: #ffffffcc;
@@ -64,6 +64,7 @@
       border-radius: 12px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
       overflow: hidden;
+      position: relative;
       transition: transform 0.3s;
     }
     .recipe-card:hover {
@@ -78,6 +79,25 @@
       font-size: 1.2rem;
       padding: 0.8rem;
     }
+    .heart {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 20px;
+      color: gray;
+      cursor: pointer;
+    }
+    .heart.favorited {
+      color: red;
+    }
+    #mealDetails {
+      text-align: left;
+      margin-top: 2rem;
+      padding: 1rem;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
   </style>
 </head>
 <body>
@@ -86,13 +106,18 @@
     <p>Enter ingredients to find delicious meals</p>
     <input type="text" id="ingredientInput" placeholder="e.g. chicken, rice, onion">
     <button onclick="searchMeals()">Find Recipes</button>
+    <button onclick="getRandomMeal()">Surprise Me 🎲</button>
     <div class="recipes" id="recipeResults"></div>
+    <div id="mealDetails"></div>
   </div>
 
   <script>
+    const favorites = JSON.parse(localStorage.getItem('favorites')) || [];
+
     async function searchMeals() {
       const input = document.getElementById('ingredientInput').value.trim();
       const recipeDiv = document.getElementById('recipeResults');
+      document.getElementById('mealDetails').innerHTML = '';
       recipeDiv.innerHTML = '';
 
       if (!input) {
@@ -111,20 +136,88 @@
           return;
         }
 
-        data.meals.forEach(meal => {
-          const card = document.createElement('div');
-          card.className = 'recipe-card';
-          card.innerHTML = `
-            <img src="${meal.strMealThumb}" alt="${meal.strMeal}">
-            <h3>${meal.strMeal}</h3>
-          `;
-          recipeDiv.appendChild(card);
-        });
+        data.meals.forEach(meal => createMealCard(meal, recipeDiv));
       } catch (error) {
         console.error('Error fetching meals:', error);
         recipeDiv.innerHTML = '<p>Something went wrong. Try again later.</p>';
       }
     }
+
+    function createMealCard(meal, container) {
+      const card = document.createElement('div');
+      card.className = 'recipe-card';
+      card.innerHTML = `
+        <img src="${meal.strMealThumb}" alt="${meal.strMeal}">
+        <h3>${meal.strMeal}</h3>
+        <div class="heart ${favorites.includes(meal.idMeal) ? 'favorited' : ''}" onclick="toggleFavorite('${meal.idMeal}', this)">&#10084;</div>
+      `;
+      card.onclick = () => fetchMealDetails(meal.idMeal);
+      container.appendChild(card);
+    }
+
+    async function fetchMealDetails(mealId) {
+      const url = `https://www.themealdb.com/api/json/v1/1/lookup.php?i=${mealId}`;
+      const detailDiv = document.getElementById('mealDetails');
+      detailDiv.innerHTML = '';
+
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const meal = data.meals[0];
+
+        let ingredients = '';
+        for (let i = 1; i <= 20; i++) {
+          const ingredient = meal[`strIngredient${i}`];
+          const measure = meal[`strMeasure${i}`];
+          if (ingredient && ingredient.trim() !== '') {
+            ingredients += `<li>${ingredient} - ${measure}</li>`;
+          }
+        }
+
+        detailDiv.innerHTML = `
+          <h2>${meal.strMeal}</h2>
+          <img src="${meal.strMealThumb}" alt="${meal.strMeal}" style="max-width: 100%; border-radius: 12px;">
+          <h3>Ingredients:</h3>
+          <ul>${ingredients}</ul>
+          <h3>Instructions:</h3>
+          <p>${meal.strInstructions}</p>
+          ${meal.strYoutube ? `<p><a href="${meal.strYoutube}" target="_blank">Watch Tutorial 🎥</a></p>` : ''}
+        `;
+      } catch (err) {
+        detailDiv.innerHTML = '<p>Could not load recipe details.</p>';
+      }
+    }
+
+    function toggleFavorite(mealId, heartEl) {
+      const index = favorites.indexOf(mealId);
+      if (index > -1) {
+        favorites.splice(index, 1);
+        heartEl.classList.remove('favorited');
+      } else {
+        favorites.push(mealId);
+        heartEl.classList.add('favorited');
+      }
+      localStorage.setItem('favorites', JSON.stringify(favorites));
+    }
+
+    async function getRandomMeal() {
+      const url = 'https://www.themealdb.com/api/json/v1/1/random.php';
+      const recipeDiv = document.getElementById('recipeResults');
+      const detailDiv = document.getElementById('mealDetails');
+      recipeDiv.innerHTML = '';
+      detailDiv.innerHTML = '';
+
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const meal = data.meals[0];
+        createMealCard(meal, recipeDiv);
+        fetchMealDetails(meal.idMeal);
+      } catch (err) {
+        recipeDiv.innerHTML = '<p>Failed to load a random recipe.</p>';
+      }
+    }
   </script>
 </body>
 </html>
+
